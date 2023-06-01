@@ -19,6 +19,7 @@
     "typescript": "^5.0.4"
   },
   "dependencies": {
-    "ts-node": "^10.9.1"
+    "ts-node": "^10.9.1",
+    "ts-pattern": "^4.3.0"
   }
 }

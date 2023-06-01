@@ -1,10 +1,23 @@
 import { Token, TokenType, lookupIdentifier } from "./token";
+import { match, P } from "ts-pattern";
 
 const isLetter = (s: string | null) =>
   s !== null ? RegExp(/^[a-z_-]+$/i).test(s) : false;
 
 const isDigit = (s: string | null) =>
   s !== null ? RegExp(/^[0-9]+$/).test(s) : false;
+
+const SPECIAL_TOKENS = new Set([
+  TokenType.ELSE,
+  TokenType.FALSE,
+  TokenType.FUNCTION,
+  TokenType.IDENT,
+  TokenType.IF,
+  TokenType.INT,
+  TokenType.LET,
+  TokenType.RETURN,
+  TokenType.TRUE,
+]);
 
 export class Lexer {
   #input: string;
@@ -61,80 +74,64 @@ export class Lexer {
   }
 
   nextToken() {
-    let tok: Token;
     this.skipWhitespace();
-    switch (this.#ch) {
-      case "=":
-        if (this.peekChar() == "=") {
-          const ch = this.#ch;
-          this.readChar();
-          tok = { type: TokenType.EQ, literal: `${ch}${this.#ch}` };
-        } else {
-          tok = { type: TokenType.ASSIGN, literal: "=" };
-        }
-        break;
-      case ";":
-        tok = { type: TokenType.SEMICOLON, literal: ";" };
-        break;
-      case "(":
-        tok = { type: TokenType.LPAREN, literal: "(" };
-        break;
-      case ")":
-        tok = { type: TokenType.RPAREN, literal: ")" };
-        break;
-      case ",":
-        tok = { type: TokenType.COMMA, literal: "," };
-        break;
-      case "+":
-        tok = { type: TokenType.PLUS, literal: "+" };
-        break;
-      case "!":
-        if (this.peekChar() == "=") {
-          const ch = this.#ch;
-          this.readChar();
-          tok = { type: TokenType.NOT_EQ, literal: `${ch}${this.#ch}` };
-        } else {
-          tok = { type: TokenType.BANG, literal: "!" };
-        }
-        break;
-      case "-":
-        tok = { type: TokenType.MINUS, literal: "-" };
-        break;
-      case "/":
-        tok = { type: TokenType.SLASH, literal: "/" };
-        break;
-      case "*":
-        tok = { type: TokenType.ASTERISK, literal: "*" };
-        break;
-      case "<":
-        tok = { type: TokenType.LT, literal: "<" };
-        break;
-      case ">":
-        tok = { type: TokenType.GT, literal: ">" };
-        break;
-      case "{":
-        tok = { type: TokenType.LBRACE, literal: "{" };
-        break;
-      case "}":
-        tok = { type: TokenType.RBRACE, literal: "}" };
-        break;
-      case null:
-        tok = { type: TokenType.EOF, literal: "" };
-        break;
-      default:
-        if (isLetter(this.#ch)) {
+    const tok: Token = match([this.#ch, this.peekChar()])
+      .with(["=", "="], ([char, peekChar]) => {
+        this.readChar();
+        return { type: TokenType.EQ, literal: `${char}${peekChar}` };
+      })
+      .with(["=", P.not("=")], ([literal]) => ({
+        type: TokenType.ASSIGN,
+        literal,
+      }))
+      .with(["!", "="], ([char, peekChar]) => {
+        this.readChar();
+        return {
+          type: TokenType.NOT_EQ,
+          literal: `${char}${peekChar}`,
+        };
+      })
+      .with(["!", P.not("=")], ([literal]) => ({
+        type: TokenType.BANG,
+        literal,
+      }))
+      .with([";", P.any], ([literal]) => ({
+        type: TokenType.SEMICOLON,
+        literal,
+      }))
+      .with(["(", P.any], ([literal]) => ({ type: TokenType.LPAREN, literal }))
+      .with([")", P.any], ([literal]) => ({ type: TokenType.RPAREN, literal }))
+      .with([",", P.any], ([literal]) => ({ type: TokenType.COMMA, literal }))
+      .with(["+", P.any], ([literal]) => ({ type: TokenType.PLUS, literal }))
+      .with(["-", P.any], ([literal]) => ({ type: TokenType.MINUS, literal }))
+      .with(["/", P.any], ([literal]) => ({ type: TokenType.SLASH, literal }))
+      .with(["*", P.any], ([literal]) => ({
+        type: TokenType.ASTERISK,
+        literal,
+      }))
+      .with(["<", P.any], ([literal]) => ({ type: TokenType.LT, literal }))
+      .with([">", P.any], ([literal]) => ({ type: TokenType.GT, literal }))
+      .with(["{", P.any], ([literal]) => ({ type: TokenType.LBRACE, literal }))
+      .with(["}", P.any], ([literal]) => ({ type: TokenType.RBRACE, literal }))
+      .with([null, P.any], (_) => ({ type: TokenType.EOF, literal: "" }))
+      .with(
+        P.when((ch) => isLetter(ch[0])),
+        () => {
           const literal = this.readIdentifier();
-          tok = { type: lookupIdentifier(literal), literal };
-          return tok;
-        } else if (isDigit(this.#ch)) {
-          tok = { type: TokenType.INT, literal: this.readNumber() };
-          return tok;
-        } else {
-          tok = { type: TokenType.ILLEGAL, literal: "" };
+          return { type: lookupIdentifier(literal), literal };
         }
-    }
+      )
+      .with(
+        P.when((ch) => isDigit(ch[0])),
+        () => {
+          return { type: TokenType.INT, literal: this.readNumber() };
+        }
+      )
+      .otherwise(() => ({ type: TokenType.ILLEGAL, literal: "" }));
 
-    this.readChar();
+    if (!SPECIAL_TOKENS.has(tok.type)) {
+      this.readChar();
+    }
     return tok;
   }
 }

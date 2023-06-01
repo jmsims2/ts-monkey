@@ -107,7 +107,7 @@ describe("Lexer tests", () => {
     ];
 
     const lexer = new Lexer(input);
-    testCases.forEach(({ type, literal }, index) => {
+    testCases.forEach(({ type, literal }) => {
       expect(lexer.nextToken()).toMatchObject({ type, literal });
     });
   });
